@@ -34,9 +34,9 @@ interface GeminiResponse {
                 web?: {
                     uri: string;
                     title: string;
-                }
-            }[];
-        };
+                } | undefined;
+            }[] | undefined;
+        } | undefined;
     }[];
     error?: {
         message: string;
@@ -46,9 +46,10 @@ interface GeminiResponse {
 
 // Safely access the API Key. 
 // We use a direct environment variable check. If `process` is defined (i.e., during the build),
-// it pulls the key. If not, it remains an empty string. This reference is less transparent 
-// to static secrets scanners than simple dot notation.
-const API_KEY = process.env.GEMINI_API_KEY || "";
+// it pulls the key. If not, it remains an empty string.
+const API_KEY = typeof process !== 'undefined' 
+    ? process.env.NEXT_PUBLIC_GEMINI_API_KEY || "" 
+    : "";
 
 /**
  * MessageBubble Component: Renders a single chat message (User or AI)
@@ -103,18 +104,15 @@ const App = () => {
 
     // --- 1. Firebase/Authentication Setup (Simulated in React) ---
     useEffect(() => {
-        // This simulates the authentication steps performed by the original HTML script.
         const initializeAuth = async () => {
             try {
                 // Mocking the environment global variables and simulating auth success
-                // We access the window global safely for client-side variables using the CustomWindow interface
                 const initialAuthToken = typeof window !== 'undefined' && typeof (window as CustomWindow).__initial_auth_token !== 'undefined' 
                     ? (window as CustomWindow).__initial_auth_token 
                     : null;
                 
                 let mockUserId = 'anonymous-user-' + Math.random().toString(36).substring(2, 9);
                 if (initialAuthToken) {
-                    // In a real app, this would be signInWithCustomToken and getting the actual UID
                     mockUserId = 'auth-user-' + initialAuthToken.substring(0, 8); 
                 }
                 setUserId(mockUserId);
@@ -136,7 +134,7 @@ const App = () => {
         }
     }, [chatHistory]);
 
-    // --- 3. Chat Logic: Send Message and Call API ---
+    // --- 3. Chat Logic: Send Message and Call API (Restored Direct Call) ---
     const sendMessage = async () => {
         const query = userInput.trim();
         if (!query || loading) return;
@@ -159,52 +157,46 @@ const App = () => {
             },
         };
 
-        try {
-            const response = await fetch('/api/generateContent', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${API_KEY}`;
 
-            const result = await response.json();
-            if (!response.ok) {
-                throw new Error(result.error || 'Failed to fetch data from API');
-            }
+        let maxRetries = 5;
+        let delay = 1000;
+        let result: GeminiResponse | undefined;
 
-            const candidate = result?.candidates?.[0];
-            const text = candidate?.content?.parts?.[0]?.text;
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
 
-            if (text) {
-                let sources: Source[] = [];
-                const groundingMetadata = candidate.groundingMetadata;
-                if (groundingMetadata && groundingMetadata.groundingAttributions) {
-                    sources = groundingMetadata.groundingAttributions
-                        .map(attribution => ({
-                            uri: attribution.web?.uri || '',
-                            title: attribution.web?.title,
-                        }))
-                        .filter((source: Source) => source.uri);
+                if (response.status === 429) {
+                    if (i < maxRetries - 1) {
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        delay *= 2;
+                        continue;
+                    }
                 }
 
-                const aiMessage: ChatMessage = {
-                    role: 'ai',
-                    text: text,
-                    sources: sources,
-                };
-                setChatHistory(prev => [...prev, aiMessage]);
-            } else {
-                const errorDetail = result?.error?.message || 'Received an empty or malformed response.';
-                const errorMsg: ChatMessage = { role: 'ai', text: `An unexpected error occurred: ${errorDetail}` };
-                setChatHistory(prev => [...prev, errorMsg]);
-            }
-        } catch (error) {
-            console.error('API Fetch Error:', error);
-            const errorMsg: ChatMessage = { role: 'ai', text: `Error: ${error.message}` };
-            setChatHistory(prev => [...prev, errorMsg]);
-        }
+                result = (await response.json()) as GeminiResponse;
+                if (!response.ok) {
+                    throw new Error(result?.error?.message || `HTTP error! Status: ${response.status}`);
+                }
+                break;
 
-        setLoading(false);
-    };
+            } catch (error) {
+                console.error('API Fetch Error:', error);
+                if (i === maxRetries - 1) {
+                    const finalErrorMsg: ChatMessage = { role: 'ai', text: `Error: Could not connect to the AI model after multiple retries. Please check your API key and connection.` };
+                    setChatHistory(prev => [...prev, finalErrorMsg]);
+                    setLoading(false);
+                    return;
+                }
+                await new Promise(resolve => setTimeout(resolve, delay));
+                delay *= 2;
+            }
+        }
 
         // Process Response using the strictly defined type
         const candidate = result?.candidates?.[0];
@@ -212,14 +204,14 @@ const App = () => {
 
         if (text) {
             let sources: Source[] = [];
-            const groundingMetadata = candidate.groundingMetadata;
+            const groundingMetadata = candidate?.groundingMetadata;
             if (groundingMetadata && groundingMetadata.groundingAttributions) {
                 sources = groundingMetadata.groundingAttributions
                     .map(attribution => ({ 
                         uri: attribution.web?.uri || '',
                         title: attribution.web?.title,
                     }))
-                    .filter((source: Source) => source.uri);
+                    .filter((source: Source) => source.uri.length > 0);
             }
 
             const aiMessage: ChatMessage = { 
@@ -306,7 +298,7 @@ const App = () => {
                 {/* API Key Status Warning */}
                 {API_KEY === "" && (
                     <div className="alert alert-warning p-2 small mt-2" role="alert">
-                        <strong>Warning:</strong> API Key is empty. Replace it for live external deployment.
+                        <strong>Warning:</strong> API Key is empty. Replace it for live external deployment using the <code>NEXT_PUBLIC_GEMINI_API_KEY</code> environment variable.
                     </div>
                 )}
 
