@@ -48,7 +48,7 @@ interface GeminiResponse {
 // We use a direct environment variable check. If `process` is defined (i.e., during the build),
 // it pulls the key. If not, it remains an empty string.
 const API_KEY = typeof process !== 'undefined' 
-    ? process.env.NEXT_PUBLIC_GEMINI_API_KEY || "" 
+    ? process.env.GEMINI_API_KEY || "" 
     : "";
 
 /**
@@ -298,7 +298,7 @@ const App = () => {
                 {/* API Key Status Warning */}
                 {API_KEY === "" && (
                     <div className="alert alert-warning p-2 small mt-2" role="alert">
-                        <strong>Warning:</strong> API Key is empty. Replace it for live external deployment using the <code>NEXT_PUBLIC_GEMINI_API_KEY</code> environment variable.
+                        <strong>Warning:</strong> API Key is empty. Replace it for live external deployment using the <code>GEMINI_API_KEY</code> environment variable.
                     </div>
                 )}
 
