@@ -6,22 +6,23 @@ interface ChatMessage { role: 'user' | 'model'; parts: ChatMessagePart[] }
 interface GeminiPayload { contents: ChatMessage[] }
 
 /**
- * HEAD Handler
- * Used by the client component to quickly check if the GEMINI_API_KEY is configured.
- * Returns 200 OK if the key is found, or 500 if it is missing.
+ * GET Handler
+ * Used by the client component (ChatClient.tsx) to quickly check if the GEMINI_API_KEY is configured.
+ * This replaces the previous HEAD request to resolve the 405 Method Not Allowed error.
+ * * Returns 200 OK if the key is found, or 500 if it is missing.
  */
-export async function HEAD(request: NextRequest) {
+export async function GET(request: NextRequest) {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
         // Return a 500 Internal Server Error, as a missing critical environment
-        // variable is a server misconfiguration error.
+        // variable is a server misconfiguration error, informing the client the key is missing.
         return NextResponse.json({ 
             error: "API Key not configured on the server. Please set the GEMINI_API_KEY environment variable." 
         }, { status: 500 }); 
     }
 
-    // Key exists, success.
+    // Key exists, return 200 OK.
     return new NextResponse(null, { status: 200 });
 }
 

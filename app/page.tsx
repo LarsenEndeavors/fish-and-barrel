@@ -112,9 +112,10 @@ const ChatClient = () => {
                 }
                 setUserId(mockUserId);
 
-                // Check if API key warning is needed by trying a simple fetch to the new /api/chat HEAD route
+                // Check if API key warning is needed by trying a simple fetch to the new /api/chat GET route
+                // Switched from HEAD to GET as HEAD was causing a 405 Method Not Allowed error.
                 try {
-                    const checkResponse = await fetch('/api/chat', { method: 'HEAD' });
+                    const checkResponse = await fetch('/api/chat', { method: 'GET' });
                     
                     // If the response is not OK (e.g., 500 error if GEMINI_API_KEY is missing), set the flag to false.
                     if (!checkResponse.ok) { 
