@@ -206,6 +206,9 @@ const ChatClient = () => {
         if (backgroundImage) {
             // Apply the image URL to the CSS variable in the body style
             document.body.style.setProperty('--dynamic-bg-image', backgroundImage);
+            document.body.style.setProperty('--dynamic-bg-opacity', '1'); // Show overlay when image is set
+        } else {
+            document.body.style.setProperty('--dynamic-bg-opacity', '0'); // Hide overlay when no image is set
         }
     }, [backgroundImage]);
 
@@ -219,7 +222,8 @@ const ChatClient = () => {
     // --- 5. Chat Logic: Send Message to API Proxy Route ---
     const sendMessage = async () => {
         const query = userInput.trim();
-        const shouldGenerateBg = query.split(/\s+/).length > 3 && !backgroundLoading; // Only generate BG for longer, new queries
+        // Only generate BG for longer, new queries and if not already loading a background
+        const shouldGenerateBg = query.split(/\s+/).length > 3 && !backgroundLoading; 
 
         if (!query || loading || !apiKeyExists) return; 
 
