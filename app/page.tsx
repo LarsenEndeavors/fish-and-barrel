@@ -48,6 +48,10 @@ interface ImagenResponse {
     predictions?: {
         bytesBase64Encoded: string;
     }[];
+    // ADDED: Include optional error structure for failed API calls from the proxy
+    error?: {
+        message: string;
+    };
 }
 
 
@@ -180,6 +184,7 @@ const ChatClient = () => {
                 
                 // If the response is not OK (e.g., 500 from our proxy for API key error), throw
                 if (!response.ok) {
+                    // This line now correctly accesses the optional 'error' property on ImagenResponse
                     throw new Error(result?.error?.message || `Image API HTTP error! Status: ${response.status}`);
                 }
 
