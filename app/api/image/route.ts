@@ -5,6 +5,28 @@ const IMAGE_MODEL = 'gemini-2.5-flash-image-preview';
 // This model uses the standard generateContent endpoint, not the specialized :predict endpoint
 const IMAGE_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${IMAGE_MODEL}:generateContent`;
 
+// --- NEW INTERFACE DEFINITION ---
+interface ImageApiResponseBody {
+    candidates?: {
+        content?: {
+            parts?: {
+                inlineData?: {
+                    mimeType: string;
+                    data: string;
+                };
+            }[];
+        };
+    }[];
+    error?: {
+        message: string;
+    };
+    // Include the possible quota/API error structure here for runtime check
+    // This handles cases where the API returns a non-200 status with an error body
+    // or a 200 status with a specific error message structure.
+    message?: string; 
+}
+// --------------------------------
+
 /**
  * POST Handler for Image Generation.
  * This route securely handles the Image API call using the server-side API key.
@@ -41,7 +63,7 @@ export async function POST(request: NextRequest) {
         const maxRetries = 5;
         let delay = 1000;
         let finalResponse: Response | undefined;
-        let finalData: any;
+        let finalData: ImageApiResponseBody | undefined; // Using the specific interface now
 
         for (let i = 0; i < maxRetries; i++) {
             const response = await fetch(`${IMAGE_API_URL}?key=${apiKey}`, {
@@ -51,10 +73,24 @@ export async function POST(request: NextRequest) {
             });
 
             finalResponse = response;
-            finalData = await response.json();
+            // Ensure we handle JSON parsing safely
+            try {
+                finalData = await response.json();
+            } catch (jsonError) {
+                // If parsing fails, treat it as an internal server error
+                if (i < maxRetries - 1) {
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 2; 
+                    continue;
+                }
+                finalData = { error: { message: `Failed to parse response from API: ${jsonError}` } };
+                break;
+            }
+
 
             // Check for explicit rate limiting (429) or Quota Exceeded error in the response body
-            const isQuotaError = finalData.error?.message?.includes("Quota exceeded");
+            // Check both error field and top-level message field which can sometimes hold the error string
+            const isQuotaError = finalData?.error?.message?.includes("Quota exceeded") || finalData?.message?.includes("Quota exceeded");
             
             if (response.status === 429 || isQuotaError) {
                 if (i < maxRetries - 1) {
