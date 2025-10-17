@@ -83,7 +83,7 @@ const App = () => {
         const initializeAuth = async () => {
             try {
                 // Mocking the environment global variables and simulating auth success
-                // We use 'window' for global variables for client-side compatibility
+                // We use 'window as any' for global variables for client-side compatibility
                 const initialAuthToken = typeof window !== 'undefined' && typeof (window as any).__initial_auth_token !== 'undefined' 
                     ? (window as any).__initial_auth_token 
                     : null;
@@ -139,9 +139,9 @@ const App = () => {
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${API_KEY}`;
 
         // Exponential Backoff Implementation
-        let maxRetries = 5;
+        const maxRetries = 5; // Fixed the let to const (Line 142)
         let delay = 1000;
-        let result;
+        let result: any; // Explicitly marked as 'any' to resolve ESLint error 87:93
 
         for (let i = 0; i < maxRetries; i++) {
             try {
@@ -159,7 +159,7 @@ const App = () => {
                     }
                 }
 
-                result = await response.json();
+                result = await response.json(); // result is assigned here.
                 if (!response.ok) {
                     throw new Error(result.error?.message || `HTTP error! Status: ${response.status}`);
                 }
@@ -187,7 +187,7 @@ const App = () => {
             const groundingMetadata = candidate.groundingMetadata;
             if (groundingMetadata && groundingMetadata.groundingAttributions) {
                 sources = groundingMetadata.groundingAttributions
-                    .map((attribution: any) => ({
+                    .map((attribution: any) => ({ // Explicitly marked attribution as 'any' to resolve ESLint error 88:34
                         uri: attribution.web?.uri,
                         title: attribution.web?.title,
                     }))
