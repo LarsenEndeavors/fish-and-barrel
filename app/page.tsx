@@ -18,6 +18,11 @@ interface MessageBubbleProps {
     message: ChatMessage;
 }
 
+// Custom interface for the browser global object to avoid 'any' error
+interface CustomWindow extends Window {
+    __initial_auth_token?: string;
+}
+
 // Interface for the API response structure to eliminate 'any' usage
 interface GeminiResponse {
     candidates?: {
@@ -103,9 +108,9 @@ const App = () => {
         const initializeAuth = async () => {
             try {
                 // Mocking the environment global variables and simulating auth success
-                // We access the window global safely for client-side variables
-                const initialAuthToken = typeof window !== 'undefined' && typeof (window as any).__initial_auth_token !== 'undefined' 
-                    ? (window as any).__initial_auth_token 
+                // We access the window global safely for client-side variables using the CustomWindow interface
+                const initialAuthToken = typeof window !== 'undefined' && typeof (window as CustomWindow).__initial_auth_token !== 'undefined' 
+                    ? (window as CustomWindow).__initial_auth_token 
                     : null;
                 
                 let mockUserId = 'anonymous-user-' + Math.random().toString(36).substring(2, 9);
@@ -161,7 +166,7 @@ const App = () => {
         // Exponential Backoff Implementation
         const maxRetries = 5;
         let delay = 1000;
-        let result: GeminiResponse | undefined; // Now using the explicit interface
+        let result: GeminiResponse | undefined;
 
         for (let i = 0; i < maxRetries; i++) {
             try {
