@@ -18,6 +18,27 @@ interface MessageBubbleProps {
     message: ChatMessage;
 }
 
+// Interface for the API response structure to eliminate 'any' usage
+interface GeminiResponse {
+    candidates?: {
+        content?: {
+            parts?: { text: string }[];
+        };
+        groundingMetadata?: {
+            groundingAttributions?: {
+                web?: {
+                    uri: string;
+                    title: string;
+                }
+            }[];
+        };
+    }[];
+    error?: {
+        message: string;
+    };
+}
+
+
 // Safely access the API Key. 
 // In a Next.js build, process.env is handled by the bundler. 
 // This check prevents "ReferenceError: process is not defined" in non-Node environments (like this sandbox).
@@ -79,11 +100,10 @@ const App = () => {
     // --- 1. Firebase/Authentication Setup (Simulated in React) ---
     useEffect(() => {
         // This simulates the authentication steps performed by the original HTML script.
-        // In a full Next.js project, you would import and use Firebase SDK here.
         const initializeAuth = async () => {
             try {
                 // Mocking the environment global variables and simulating auth success
-                // We use 'window as any' for global variables for client-side compatibility
+                // We access the window global safely for client-side variables
                 const initialAuthToken = typeof window !== 'undefined' && typeof (window as any).__initial_auth_token !== 'undefined' 
                     ? (window as any).__initial_auth_token 
                     : null;
@@ -139,9 +159,9 @@ const App = () => {
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${API_KEY}`;
 
         // Exponential Backoff Implementation
-        const maxRetries = 5; // Fixed the let to const (Line 142)
+        const maxRetries = 5;
         let delay = 1000;
-        let result: any; // Explicitly marked as 'any' to resolve ESLint error 87:93
+        let result: GeminiResponse | undefined; // Now using the explicit interface
 
         for (let i = 0; i < maxRetries; i++) {
             try {
@@ -159,8 +179,10 @@ const App = () => {
                     }
                 }
 
-                result = await response.json(); // result is assigned here.
+                // Cast response.json() to the interface
+                result = (await response.json()) as GeminiResponse; 
                 if (!response.ok) {
+                    // Access error message safely using the defined structure
                     throw new Error(result.error?.message || `HTTP error! Status: ${response.status}`);
                 }
                 break;
@@ -178,7 +200,7 @@ const App = () => {
             }
         }
 
-        // Process Response
+        // Process Response using the strictly defined type
         const candidate = result?.candidates?.[0];
         const text = candidate?.content?.parts?.[0]?.text;
 
@@ -187,8 +209,8 @@ const App = () => {
             const groundingMetadata = candidate.groundingMetadata;
             if (groundingMetadata && groundingMetadata.groundingAttributions) {
                 sources = groundingMetadata.groundingAttributions
-                    .map((attribution: any) => ({ // Explicitly marked attribution as 'any' to resolve ESLint error 88:34
-                        uri: attribution.web?.uri,
+                    .map(attribution => ({ 
+                        uri: attribution.web?.uri || '',
                         title: attribution.web?.title,
                     }))
                     .filter((source: Source) => source.uri);
