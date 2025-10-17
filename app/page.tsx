@@ -1,6 +1,23 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 
+// --- TypeScript Interface Definitions ---
+
+interface Source {
+    uri: string;
+    title?: string;
+}
+
+interface ChatMessage {
+    role: 'user' | 'ai';
+    text: string;
+    sources?: Source[];
+}
+
+interface MessageBubbleProps {
+    message: ChatMessage;
+}
+
 // Safely access the API Key. 
 // In a Next.js build, process.env is handled by the bundler. 
 // This check prevents "ReferenceError: process is not defined" in non-Node environments (like this sandbox).
@@ -11,7 +28,7 @@ const API_KEY = typeof process !== 'undefined'
 /**
  * MessageBubble Component: Renders a single chat message (User or AI)
  */
-const MessageBubble = ({ message }) => {
+const MessageBubble = ({ message }: MessageBubbleProps) => {
     const isUser = message.role === 'user';
     const uniqueSources = message.sources 
         ? message.sources.filter((v, i, a) => a.findIndex(t => (t.uri === v.uri)) === i)
@@ -51,16 +68,13 @@ const MessageBubble = ({ message }) => {
  * Main Application Component (App)
  */
 const App = () => {
-    // API_KEY is now defined in the module scope above, removing redundant definition here.
-    // const API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || ""; 
-
-    const [chatHistory, setChatHistory] = useState([
+    const [chatHistory, setChatHistory] = useState<ChatMessage[]>([
         { role: 'ai', text: "Hello Skathix! I am a grounded AI assistant. Ask me anything, and I will use Google Search to provide up-to-date, sourced information." }
     ]);
     const [userInput, setUserInput] = useState('');
     const [loading, setLoading] = useState(true);
     const [userId, setUserId] = useState('Initializing...');
-    const chatRef = useRef(null);
+    const chatRef = useRef<HTMLDivElement>(null);
 
     // --- 1. Firebase/Authentication Setup (Simulated in React) ---
     useEffect(() => {
@@ -69,7 +83,10 @@ const App = () => {
         const initializeAuth = async () => {
             try {
                 // Mocking the environment global variables and simulating auth success
-                const initialAuthToken = typeof window.__initial_auth_token !== 'undefined' ? window.__initial_auth_token : null;
+                // We use 'window' for global variables for client-side compatibility
+                const initialAuthToken = typeof window !== 'undefined' && typeof (window as any).__initial_auth_token !== 'undefined' 
+                    ? (window as any).__initial_auth_token 
+                    : null;
                 
                 let mockUserId = 'anonymous-user-' + Math.random().toString(36).substring(2, 9);
                 if (initialAuthToken) {
@@ -100,7 +117,7 @@ const App = () => {
         const query = userInput.trim();
         if (!query || loading) return;
 
-        const newUserMessage = { role: 'user', text: query };
+        const newUserMessage: ChatMessage = { role: 'user', text: query };
         setChatHistory(prev => [...prev, newUserMessage]);
         setUserInput('');
         setLoading(true);
@@ -151,7 +168,8 @@ const App = () => {
             } catch (error) {
                 console.error("API Fetch Error:", error);
                 if (i === maxRetries - 1) {
-                    setChatHistory(prev => [...prev, { role: 'ai', text: `Error: Could not connect to the AI model after multiple retries. Please check your API key.` }]);
+                    const errorMsg: ChatMessage = { role: 'ai', text: `Error: Could not connect to the AI model after multiple retries. Please check your API key.` };
+                    setChatHistory(prev => [...prev, errorMsg]);
                     setLoading(false);
                     return;
                 }
@@ -165,18 +183,18 @@ const App = () => {
         const text = candidate?.content?.parts?.[0]?.text;
 
         if (text) {
-            let sources = [];
+            let sources: Source[] = [];
             const groundingMetadata = candidate.groundingMetadata;
             if (groundingMetadata && groundingMetadata.groundingAttributions) {
                 sources = groundingMetadata.groundingAttributions
-                    .map(attribution => ({
+                    .map((attribution: any) => ({
                         uri: attribution.web?.uri,
                         title: attribution.web?.title,
                     }))
-                    .filter(source => source.uri);
+                    .filter((source: Source) => source.uri);
             }
 
-            const aiMessage = { 
+            const aiMessage: ChatMessage = { 
                 role: 'ai', 
                 text: text, 
                 sources: sources,
@@ -185,13 +203,14 @@ const App = () => {
 
         } else {
             const errorDetail = result?.error?.message || "Received an empty or malformed response.";
-            setChatHistory(prev => [...prev, { role: 'ai', text: `An unexpected error occurred: ${errorDetail}` }]);
+            const errorMsg: ChatMessage = { role: 'ai', text: `An unexpected error occurred: ${errorDetail}` };
+            setChatHistory(prev => [...prev, errorMsg]);
         }
 
         setLoading(false);
     };
 
-    const handleKeyDown = (event) => {
+    const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
         if (event.key === 'Enter' && !loading && userInput.trim() !== '') {
             sendMessage();
         }
