@@ -384,8 +384,8 @@ async function handleApi(request: Request) {
             headers: { 'Content-Type': 'application/json' }
         });
 
-    } catch (e: any) {
-        return new Response(JSON.stringify({ error: e.message || "Internal server error" }), {
+    } catch (e: unknown) {
+        return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Internal server error" }), {
             status: 500, 
             headers: { 'Content-Type': 'application/json' }
         });
@@ -408,7 +408,7 @@ const FinalApp = () => {
 // To enable Next.js to use the simulated API endpoint, we attach the handler to the global scope.
 // This is a common pattern when working with single-file environments that simulate multi-file apps.
 if (typeof global !== 'undefined') {
-    // @ts-ignore - Ignoring TS error since this is a runtime patch for the single-file environment
+    // @ts-expect-error - Ignoring TS error since this is a runtime patch for the single-file environment
     global.handleApiRoute = async (url: string, request: Request) => {
         if (url.endsWith('/api/chat')) {
             return handleApi(request);
