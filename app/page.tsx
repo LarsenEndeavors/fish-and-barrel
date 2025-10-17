@@ -147,8 +147,9 @@ const ChatClient = () => {
         setBackgroundLoading(true);
 
         const imagePrompt = `A stunning, high-definition fantasy illustration for the topic: "${prompt}". Focus on cinematic lighting, epic composition, and painterly detail. Digital art. Cinematic.`;
-        const apiKey = ""; // Canvas environment handles the key
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+        
+        // Use the local proxy route instead of the public endpoint
+        const apiUrl = '/api/image'; 
 
         const payload = { 
             instances: { prompt: imagePrompt }, 
@@ -176,9 +177,19 @@ const ChatClient = () => {
                 }
 
                 const result: ImagenResponse = await response.json();
+                
+                // If the response is not OK (e.g., 500 from our proxy for API key error), throw
+                if (!response.ok) {
+                    throw new Error(result?.error?.message || `Image API HTTP error! Status: ${response.status}`);
+                }
+
                 base64Data = result?.predictions?.[0]?.bytesBase64Encoded;
 
                 if (!base64Data) {
+                    // Check if there was a problem with the payload/API but no HTTP error
+                    if (result?.error?.message) {
+                        throw new Error(`Image API Error: ${result.error.message}`);
+                    }
                     throw new Error("Received empty or malformed image data.");
                 }
                 break;
@@ -234,6 +245,7 @@ const ChatClient = () => {
 
         // Start background generation concurrently, if criteria met
         if (shouldGenerateBg) {
+            // Initiate background generation without awaiting it
             generateAndSetBackground(query);
         }
 
