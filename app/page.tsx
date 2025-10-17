@@ -1,7 +1,12 @@
+"use client";
 import React, { useState, useEffect, useRef } from 'react';
 
-// This is the correct placement for the API key definition now that imports are above it.
-const API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || ""; 
+// Safely access the API Key. 
+// In a Next.js build, process.env is handled by the bundler. 
+// This check prevents "ReferenceError: process is not defined" in non-Node environments (like this sandbox).
+const API_KEY = typeof process !== 'undefined' 
+    ? process.env.NEXT_PUBLIC_GEMINI_API_KEY || "" 
+    : "";
 
 /**
  * MessageBubble Component: Renders a single chat message (User or AI)
@@ -46,6 +51,9 @@ const MessageBubble = ({ message }) => {
  * Main Application Component (App)
  */
 const App = () => {
+    // API_KEY is now defined in the module scope above, removing redundant definition here.
+    // const API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || ""; 
+
     const [chatHistory, setChatHistory] = useState([
         { role: 'ai', text: "Hello Skathix! I am a grounded AI assistant. Ask me anything, and I will use Google Search to provide up-to-date, sourced information." }
     ]);
