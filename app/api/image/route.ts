@@ -38,17 +38,40 @@ export async function POST(request: NextRequest) {
             },
         };
 
-        const response = await fetch(`${IMAGE_API_URL}?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(geminiImagePayload)
-        });
+        const maxRetries = 5;
+        let delay = 1000;
+        let finalResponse: Response | undefined;
+        let finalData: any;
 
-        // Forward the response data and status back to the client
-        const data = await response.json();
-        
-        return NextResponse.json(data, { 
-            status: response.status 
+        for (let i = 0; i < maxRetries; i++) {
+            const response = await fetch(`${IMAGE_API_URL}?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(geminiImagePayload)
+            });
+
+            finalResponse = response;
+            finalData = await response.json();
+
+            // Check for explicit rate limiting (429) or Quota Exceeded error in the response body
+            const isQuotaError = finalData.error?.message?.includes("Quota exceeded");
+            
+            if (response.status === 429 || isQuotaError) {
+                if (i < maxRetries - 1) {
+                    // Implement exponential backoff
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 2; 
+                    continue; // Retry the request
+                }
+            }
+            
+            // If the request succeeded, or if it failed for another reason (or max retries reached), break the loop
+            break;
+        }
+
+        // Forward the final response data and status back to the client
+        return NextResponse.json(finalData, { 
+            status: finalResponse?.status || 500
         });
 
     } catch (e: unknown) {
