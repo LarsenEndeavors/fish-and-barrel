@@ -1,5 +1,7 @@
-const API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || ""; 
 import React, { useState, useEffect, useRef } from 'react';
+
+// This is the correct placement for the API key definition now that imports are above it.
+const API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || ""; 
 
 /**
  * MessageBubble Component: Renders a single chat message (User or AI)
