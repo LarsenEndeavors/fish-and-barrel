@@ -1,0 +1,9 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  GEMINI_API_KEY = "${GEMINI_API_KEY}"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
