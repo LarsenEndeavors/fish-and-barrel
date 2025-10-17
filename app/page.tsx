@@ -107,14 +107,22 @@ const ChatClient = () => {
                 
                 let mockUserId = 'anonymous-user-' + Math.random().toString(36).substring(2, 9);
                 if (initialAuthToken) {
+                    // Simulated extraction of a mock user ID from the auth token
                     mockUserId = 'auth-user-' + initialAuthToken.substring(0, 8); 
                 }
                 setUserId(mockUserId);
 
-                // Check if API key warning is needed by trying a simple fetch to the proxy
-                const checkResponse = await fetch('/api/chat', { method: 'HEAD' });
-                if (checkResponse.status === 404) { 
-                    // 404 indicates the secure endpoint is unavailable/misconfigured or missing key
+                // Check if API key warning is needed by trying a simple fetch to the new /api/chat HEAD route
+                try {
+                    const checkResponse = await fetch('/api/chat', { method: 'HEAD' });
+                    
+                    // If the response is not OK (e.g., 500 error if GEMINI_API_KEY is missing), set the flag to false.
+                    if (!checkResponse.ok) { 
+                        setApiKeyExists(false); 
+                    }
+                } catch (error) {
+                    // This catches network errors, which also indicates the route is unavailable/misconfigured
+                    console.error("API Key Check Error:", error);
                     setApiKeyExists(false); 
                 }
 
@@ -140,13 +148,15 @@ const ChatClient = () => {
     // --- 3. Chat Logic: Send Message to API Proxy Route ---
     const sendMessage = async () => {
         const query = userInput.trim();
-        if (!query || loading || !apiKeyExists) return;
+        // If query is empty, still loading, or API key is missing, halt.
+        if (!query || loading || !apiKeyExists) return; 
 
         const newUserMessage: ChatMessage = { role: 'user', text: query };
         setChatHistory(prev => [...prev, newUserMessage]);
         setUserInput('');
         setLoading(true);
 
+        // Convert chat history to the format expected by the Gemini API
         const chatMessages = [...chatHistory, newUserMessage].map(msg => ({
             role: msg.role === 'user' ? 'user' : 'model',
             parts: [{ text: msg.text }],
@@ -156,7 +166,7 @@ const ChatClient = () => {
             contents: chatMessages,
         };
 
-        // Call the local API proxy /api/chat
+        // Call the local Next.js API route /api/chat
         const apiUrl = '/api/chat'; 
 
         const maxRetries = 5;
@@ -171,7 +181,7 @@ const ChatClient = () => {
                     body: JSON.stringify(payload),
                 });
 
-                if (response.status === 429) {
+                if (response.status === 429) { // Handle rate limiting
                     if (i < maxRetries - 1) {
                         await new Promise(resolve => setTimeout(resolve, delay));
                         delay *= 2;
@@ -188,7 +198,7 @@ const ChatClient = () => {
             } catch (error) {
                 console.error('API Proxy Fetch Error:', error);
                 if (i === maxRetries - 1) {
-                    const finalErrorMsg: ChatMessage = { role: 'ai', text: `Error: Could not connect to the API proxy after multiple retries. Please check the server logs.` };
+                    const finalErrorMsg: ChatMessage = { role: 'ai', text: `Error: Could not connect to the API after multiple retries. Please check the server logs.` };
                     setChatHistory(prev => [...prev, finalErrorMsg]);
                     setLoading(false);
                     return;
@@ -211,7 +221,8 @@ const ChatClient = () => {
                         uri: attribution.web?.uri || '',
                         title: attribution.web?.title,
                     }))
-                    .filter((source: Source) => source.uri.length > 0);
+                    // Filter out sources with empty URIs
+                    .filter((source: Source) => source.uri.length > 0); 
             }
 
             const aiMessage: ChatMessage = { 
@@ -329,93 +340,12 @@ const ChatClient = () => {
     );
 };
 
-// --- Server-Side Logic for Next.js API Route (Simulated) ---
-
-// This function acts as the internal 'server' side of the API proxy
-// Next.js will call this directly during the build, allowing secure access to GEMINI_API_KEY
-async function handleApi(request: Request) {
-    // NOTE: We read the environment variable WITHOUT the NEXT_PUBLIC_ prefix 
-    // because this logic runs securely on the Next.js server/build environment.
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    if (!apiKey) {
-        return new Response(JSON.stringify({ error: "API Key not configured on the server." }), { 
-            status: 404, 
-            headers: { 'Content-Type': 'application/json' } 
-        });
-    }
-    
-    // Handle the mock API Key check (HEAD request from client component initialization)
-    if (request.method === 'HEAD') {
-        return new Response(null, { status: 200 }); // Success, key exists
-    }
-
-    // Handle POST request for actual content generation
-    if (request.method !== 'POST') {
-        return new Response(JSON.stringify({ error: "Method not allowed" }), { 
-            status: 405,
-            headers: { 'Content-Type': 'application/json' } 
-        });
-    }
-
-    try {
-        const clientPayload = await request.json();
-
-        const geminiPayload = {
-            contents: clientPayload.contents,
-            tools: [{ "google_search": {} }],
-            systemInstruction: {
-                parts: [{ text: "You are a world-class, fact-checked AI assistant. Use Google Search to ground your answers in real-time information. You must cite your sources when using search results." }],
-            },
-        };
-
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(geminiPayload)
-        });
-
-        const data = await response.json();
-        
-        return new Response(JSON.stringify(data), { 
-            status: response.status,
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-    } catch (e: any) {
-        return new Response(JSON.stringify({ error: e.message || "Internal server error" }), {
-            status: 500, 
-            headers: { 'Content-Type': 'application/json' }
-        });
-    }
-}
-
-// Since Next.js requires a default export for the page component, we export a wrapper
-// that simulates the page content, but we intercept client requests via the proxy.
+// --- Server Component Wrapper (Required by Next.js App Router) ---
 const FinalApp = () => {
     // We render the client-side component (ChatClient) inside the Server Component wrapper.
     return (
         <ChatClient />
     );
 }
-
-// NOTE: In a true Next.js app, we would put the API route logic 
-// into a separate file (/app/api/chat/route.ts) that exports the handler functions.
-// Here, we simulate that routing behavior within the single file using a global constant.
-
-// To enable Next.js to use the simulated API endpoint, we attach the handler to the global scope.
-// This is a common pattern when working with single-file environments that simulate multi-file apps.
-if (typeof global !== 'undefined') {
-    // @ts-ignore - Ignoring TS error since this is a runtime patch for the single-file environment
-    global.handleApiRoute = async (url: string, request: Request) => {
-        if (url.endsWith('/api/chat')) {
-            return handleApi(request);
-        }
-        return new Response(null, { status: 404 });
-    };
-}
-
 
 export default FinalApp;
