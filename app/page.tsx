@@ -48,7 +48,7 @@ interface GeminiResponse {
 // We use a direct environment variable check. If `process` is defined (i.e., during the build),
 // it pulls the key. If not, it remains an empty string. This reference is less transparent 
 // to static secrets scanners than simple dot notation.
-const API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
+const API_KEY = process.env.GEMINI_API_KEY || "";
 
 /**
  * MessageBubble Component: Renders a single chat message (User or AI)
@@ -146,63 +146,65 @@ const App = () => {
         setUserInput('');
         setLoading(true);
 
-        // Map chat history to the format expected by the API payload
-        const newHistory = [...chatHistory, newUserMessage].map(msg => ({ 
-            role: msg.role === 'user' ? 'user' : 'model', 
-            parts: [{ text: msg.text }] 
+        const newHistory = [...chatHistory, newUserMessage].map(msg => ({
+            role: msg.role === 'user' ? 'user' : 'model',
+            parts: [{ text: msg.text }],
         }));
 
         const payload = {
             contents: newHistory,
-            tools: [{ "google_search": {} }],
+            tools: [{ google_search: {} }],
             systemInstruction: {
-                parts: [{ text: "You are a world-class, fact-checked AI assistant. Use Google Search to ground your answers in real-time information. You must cite your sources when using search results." }]
-            }
+                parts: [{ text: "You are a world-class, fact-checked AI assistant. Use Google Search to ground your answers in real-time information. You must cite your sources when using search results." }],
+            },
         };
-        
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${API_KEY}`;
 
-        // Exponential Backoff Implementation
-        const maxRetries = 5;
-        let delay = 1000;
-        let result: GeminiResponse | undefined;
+        try {
+            const response = await fetch('/api/generateContent', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
 
-        for (let i = 0; i < maxRetries; i++) {
-            try {
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if (response.status === 429) {
-                    if (i < maxRetries - 1) {
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                        delay *= 2;
-                        continue;
-                    }
-                }
-
-                // Cast response.json() to the interface
-                result = (await response.json()) as GeminiResponse; 
-                if (!response.ok) {
-                    // Access error message safely using the defined structure
-                    throw new Error(result.error?.message || `HTTP error! Status: ${response.status}`);
-                }
-                break;
-
-            } catch (error) {
-                console.error("API Fetch Error:", error);
-                if (i === maxRetries - 1) {
-                    const errorMsg: ChatMessage = { role: 'ai', text: `Error: Could not connect to the AI model after multiple retries. Please check your API key.` };
-                    setChatHistory(prev => [...prev, errorMsg]);
-                    setLoading(false);
-                    return;
-                }
-                await new Promise(resolve => setTimeout(resolve, delay));
-                delay *= 2;
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to fetch data from API');
             }
+
+            const candidate = result?.candidates?.[0];
+            const text = candidate?.content?.parts?.[0]?.text;
+
+            if (text) {
+                let sources: Source[] = [];
+                const groundingMetadata = candidate.groundingMetadata;
+                if (groundingMetadata && groundingMetadata.groundingAttributions) {
+                    sources = groundingMetadata.groundingAttributions
+                        .map(attribution => ({
+                            uri: attribution.web?.uri || '',
+                            title: attribution.web?.title,
+                        }))
+                        .filter((source: Source) => source.uri);
+                }
+
+                const aiMessage: ChatMessage = {
+                    role: 'ai',
+                    text: text,
+                    sources: sources,
+                };
+                setChatHistory(prev => [...prev, aiMessage]);
+            } else {
+                const errorDetail = result?.error?.message || 'Received an empty or malformed response.';
+                const errorMsg: ChatMessage = { role: 'ai', text: `An unexpected error occurred: ${errorDetail}` };
+                setChatHistory(prev => [...prev, errorMsg]);
+            }
+        } catch (error) {
+            console.error('API Fetch Error:', error);
+            const errorMsg: ChatMessage = { role: 'ai', text: `Error: ${error.message}` };
+            setChatHistory(prev => [...prev, errorMsg]);
         }
+
+        setLoading(false);
+    };
 
         // Process Response using the strictly defined type
         const candidate = result?.candidates?.[0];
