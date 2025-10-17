@@ -48,9 +48,7 @@ interface GeminiResponse {
 // We use a direct environment variable check. If `process` is defined (i.e., during the build),
 // it pulls the key. If not, it remains an empty string. This reference is less transparent 
 // to static secrets scanners than simple dot notation.
-const API_KEY = typeof process !== 'undefined' 
-    ? process.env.NEXT_PUBLIC_GEMINI_API_KEY || "" 
-    : "";
+const API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
 
 /**
  * MessageBubble Component: Renders a single chat message (User or AI)
